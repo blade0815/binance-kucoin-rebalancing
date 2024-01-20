@@ -12,8 +12,6 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 
-This was tested with Python 3.7+
-
 Some common configurations that might be needed are exposed:
 
 ### Several crypto assets, same percentage for each one
