@@ -10,35 +10,64 @@ from shared.domain.event_dispatcher import event_dispatcher
 from datetime import datetime
 
 
-def rebalance(crypto_assets: list = None, fiat_asset: str = None,
-              fiat_decimals: int = None, fiat_untouched: float = 0.0,
-              exposure: float = None, with_confirmation=True, quiet=False,
-              now=None, distribution: Distribution = None):
-
+def rebalance(
+    crypto_assets: list = None,
+    fiat_asset: str = None,
+    fiat_decimals: int = None,
+    fiat_untouched: float = 0.0,
+    exposure: float = None,
+    with_confirmation=True,
+    quiet=False,
+    now=None,
+    distribution: Distribution = None,
+):
     now = now or datetime.utcnow()
 
     # dependencies
-    user_interface: AbstractUserInterface = dependency_dispatcher.request_implementation(AbstractUserInterface)
-    exchange: AbstractExchange = dependency_dispatcher.request_implementation(AbstractExchange)
+    user_interface: AbstractUserInterface = (
+        dependency_dispatcher.request_implementation(AbstractUserInterface)
+    )
+    exchange: AbstractExchange = dependency_dispatcher.request_implementation(
+        AbstractExchange
+    )
 
-    compiled_data, current_fiat_balance, total_balance = _get_compiled_balances(crypto_assets, fiat_asset, now)
-    rebalance_data = _compute_rebalancing_data(crypto_assets, exposure, compiled_data, total_balance, distribution,
-                                               fiat_untouched)
+    compiled_data, current_fiat_balance, total_balance = _get_compiled_balances(
+        crypto_assets, fiat_asset, now
+    )
+    rebalance_data = _compute_rebalancing_data(
+        crypto_assets,
+        exposure,
+        compiled_data,
+        total_balance,
+        distribution,
+        fiat_untouched,
+    )
 
     # initial operations
-    raw_operations = _transform_rebalance_data_into_operations(rebalance_data, fiat_asset)
+    raw_operations = _transform_rebalance_data_into_operations(
+        rebalance_data, fiat_asset
+    )
 
     # default accepted operations by the exchange. This uses fiat by default
     # default_operations = exchange.get_exchange_valid_operations(raw_operations)
     # default_fees = exchange.compute_fees(default_operations, fiat_asset=fiat_asset, instant=now)
 
     # this try to use direct conversion between assets, if it exists
-    final_operations = _try_to_use_direct_conversions_between_assets(raw_operations, fiat_asset, now)
+    final_operations = _try_to_use_direct_conversions_between_assets(
+        raw_operations, fiat_asset, now
+    )
     # final_fees = exchange.compute_fees(final_operations, fiat_asset=fiat_asset, instant=now)
 
     # show summary to user
     if with_confirmation or not quiet:
-        headers = ['Symbol', 'Wanted amount', 'Wanted %', 'Current amount', 'Current %', 'Action']
+        headers = [
+            "Symbol",
+            "Wanted amount",
+            "Wanted %",
+            "Current amount",
+            "Current %",
+            "Action",
+        ]
         summary = []
         for asset, data in rebalance_data.items():
             row = [
@@ -53,13 +82,13 @@ def rebalance(crypto_assets: list = None, fiat_asset: str = None,
                     row.append(str(op))
                     break
             else:
-                row.append('NOTHING')
+                row.append("NOTHING")
             summary.append(row)
         user_interface.show_table(
             headers=headers,
             rows=summary,
-            total_balance=f'{fiat_asset} {round(total_balance, fiat_decimals)}',
-            total_number_of_operations=f'{len(final_operations)}'
+            total_balance=f"{fiat_asset} {round(total_balance, fiat_decimals)}",
+            total_number_of_operations=f"{len(final_operations)}",
         )
 
     # if there is nothing to do, return
@@ -68,38 +97,58 @@ def rebalance(crypto_assets: list = None, fiat_asset: str = None,
 
     # request confirmation, there are pending actions
     if with_confirmation:
-        confirmed = user_interface.request_confirmation('Proceed with rebalance?')
+        confirmed = user_interface.request_confirmation("Proceed with rebalance?")
         if not confirmed:
             return
 
-    unprocessed = exchange.execute_operations(final_operations, fiat_asset=fiat_asset, instant=now)
+    unprocessed = exchange.execute_operations(
+        final_operations, fiat_asset=fiat_asset, instant=now
+    )
     if len(unprocessed) > 0:
         for operation in unprocessed:
             quote_balance = exchange.get_asset_balance(operation.quote_currency)
             if quote_balance < operation.quote_amount:
-                operation.quote_amount = exchange.get_asset_balance(operation.quote_currency)
+                operation.quote_amount = exchange.get_asset_balance(
+                    operation.quote_currency
+                )
                 valid_operation = exchange.get_exchange_valid_operations([operation])
-                result = exchange.execute_operations(valid_operation, fiat_asset=fiat_asset, instant=now)
+                result = exchange.execute_operations(
+                    valid_operation, fiat_asset=fiat_asset, instant=now
+                )
                 if len(valid_operation) > 0 and len(result) > 0:
-                    raise CannotExecuteOperation(f'Cannot process operation {operation}')
+                    raise CannotExecuteOperation(
+                        f"Cannot process operation {operation}"
+                    )
 
-    compiled_data, current_fiat_balance, total_balance = _get_compiled_balances(crypto_assets, fiat_asset, now)
+    compiled_data, current_fiat_balance, total_balance = _get_compiled_balances(
+        crypto_assets, fiat_asset, now
+    )
     for crypto_asset in crypto_assets:
-        event_dispatcher.emit('crypto-asset-balance', **{
-            'now': now,
-            'crypto_asset': crypto_asset,
-            'balance': compiled_data[crypto_asset]['balance'],
-        })
-    event_dispatcher.emit('total-balance', **{
-        'now': now,
-        'fiat_asset': fiat_asset,
-        'total_balance': total_balance,
-    })
+        event_dispatcher.emit(
+            "crypto-asset-balance",
+            **{
+                "now": now,
+                "crypto_asset": crypto_asset,
+                "balance": compiled_data[crypto_asset]["balance"],
+            },
+        )
+    event_dispatcher.emit(
+        "total-balance",
+        **{
+            "now": now,
+            "fiat_asset": fiat_asset,
+            "total_balance": total_balance,
+        },
+    )
 
 
 def _try_to_use_direct_conversions_between_assets(raw_operations, fiat_asset, now):
-    exchange: AbstractExchange = dependency_dispatcher.request_implementation(AbstractExchange)
-    raw_buy_operations, raw_sell_operations = _split_buy_and_sell_operations(raw_operations)
+    exchange: AbstractExchange = dependency_dispatcher.request_implementation(
+        AbstractExchange
+    )
+    raw_buy_operations, raw_sell_operations = _split_buy_and_sell_operations(
+        raw_operations
+    )
 
     # first we extract valid quote_assets for this exchange
     quote_assets = _get_quote_assets(raw_buy_operations, raw_sell_operations)
@@ -121,18 +170,31 @@ def _try_to_use_direct_conversions_between_assets(raw_operations, fiat_asset, no
         for sell_operation in raw_sell_operations:
             if deviations[sell_operation.base_currency] <= 0:
                 continue
-            if not exchange.exchange_pair_exist(buy_operation.base_currency, sell_operation.base_currency) and \
-                    not exchange.exchange_pair_exist(sell_operation.base_currency, buy_operation.base_currency):
+            if not exchange.exchange_pair_exist(
+                buy_operation.base_currency, sell_operation.base_currency
+            ) and not exchange.exchange_pair_exist(
+                sell_operation.base_currency, buy_operation.base_currency
+            ):
                 continue
-            if buy_operation.base_currency in quote_assets and sell_operation.base_currency in quote_assets:
+            if (
+                buy_operation.base_currency in quote_assets
+                and sell_operation.base_currency in quote_assets
+            ):
                 continue
-            if buy_operation.base_currency not in quote_assets and sell_operation.base_currency not in quote_assets:
+            if (
+                buy_operation.base_currency not in quote_assets
+                and sell_operation.base_currency not in quote_assets
+            ):
                 continue
             if most_similar_sell is None:
                 most_similar_sell = sell_operation
             else:
-                current_sim = number_similarity(buy_operation.quote_amount, sell_operation.quote_amount)
-                current_best_sim = number_similarity(buy_operation.quote_amount, most_similar_sell.quote_amount)
+                current_sim = number_similarity(
+                    buy_operation.quote_amount, sell_operation.quote_amount
+                )
+                current_best_sim = number_similarity(
+                    buy_operation.quote_amount, most_similar_sell.quote_amount
+                )
                 if current_sim > current_best_sim:
                     most_similar_sell = sell_operation
 
@@ -140,19 +202,28 @@ def _try_to_use_direct_conversions_between_assets(raw_operations, fiat_asset, no
             for sell_operation in raw_sell_operations:
                 if deviations[sell_operation.base_currency] <= 0:
                     continue
-                if not exchange.exchange_pair_exist(buy_operation.base_currency, sell_operation.base_currency) and \
-                        not exchange.exchange_pair_exist(sell_operation.base_currency, buy_operation.base_currency):
+                if not exchange.exchange_pair_exist(
+                    buy_operation.base_currency, sell_operation.base_currency
+                ) and not exchange.exchange_pair_exist(
+                    sell_operation.base_currency, buy_operation.base_currency
+                ):
                     continue
                 if most_similar_sell is None:
                     most_similar_sell = sell_operation
                 else:
-                    current_sim = number_similarity(buy_operation.quote_amount, sell_operation.quote_amount)
-                    current_best_sim = number_similarity(buy_operation.quote_amount, most_similar_sell.quote_amount)
+                    current_sim = number_similarity(
+                        buy_operation.quote_amount, sell_operation.quote_amount
+                    )
+                    current_best_sim = number_similarity(
+                        buy_operation.quote_amount, most_similar_sell.quote_amount
+                    )
                     if current_sim > current_best_sim:
                         most_similar_sell = sell_operation
 
         if most_similar_sell is not None:
-            minimum_fiat = min([most_similar_sell.quote_amount, buy_operation.quote_amount])
+            minimum_fiat = min(
+                [most_similar_sell.quote_amount, buy_operation.quote_amount]
+            )
             deviations[most_similar_sell.base_currency] -= minimum_fiat
             deviations[buy_operation.base_currency] += minimum_fiat
             pairs.append((buy_operation, most_similar_sell))
@@ -178,11 +249,15 @@ def _try_to_use_direct_conversions_between_assets(raw_operations, fiat_asset, no
         sell_operation.quote_amount = minimum_fiat
         buy_operation.quote_amount = minimum_fiat
 
-        if exchange.exchange_pair_exist(buy_operation.base_currency, sell_operation.base_currency):
+        if exchange.exchange_pair_exist(
+            buy_operation.base_currency, sell_operation.base_currency
+        ):
             base_asset = buy_operation.base_currency
             quote_asset = sell_operation.base_currency
             operation_type = Operation.TYPE_BUY
-        elif exchange.exchange_pair_exist(sell_operation.base_currency, buy_operation.base_currency):
+        elif exchange.exchange_pair_exist(
+            sell_operation.base_currency, buy_operation.base_currency
+        ):
             base_asset = sell_operation.base_currency
             quote_asset = buy_operation.base_currency
             operation_type = Operation.TYPE_SELL
@@ -190,9 +265,9 @@ def _try_to_use_direct_conversions_between_assets(raw_operations, fiat_asset, no
             continue
         quote_price = exchange.get_asset_price(quote_asset, fiat_asset, instant=now)
         operation = Operation(
-            pair=f'{base_asset}/{quote_asset}',
+            pair=f"{base_asset}/{quote_asset}",
             type=operation_type,
-            quote_amount=minimum_fiat / quote_price
+            quote_amount=minimum_fiat / quote_price,
         )
         valid = exchange.get_exchange_valid_operations([operation])
         try:
@@ -222,24 +297,36 @@ def _try_to_use_direct_conversions_between_assets(raw_operations, fiat_asset, no
             type_ = Operation.TYPE_SELL
         else:
             continue
-        final_operations.append(Operation(pair=f'{asset}/{fiat_asset}', type=type_, quote_amount=abs(deviation)))
+        final_operations.append(
+            Operation(
+                pair=f"{asset}/{fiat_asset}", type=type_, quote_amount=abs(deviation)
+            )
+        )
 
     # to finalize this, get_exchange_valid_operations will return the valid ones.
     final_operations = sorted(
         exchange.get_exchange_valid_operations(final_operations),
         key=lambda o: (o.type, o.quote_amount),
-        reverse=True
+        reverse=True,
     )
     return final_operations
 
 
 def _get_quote_assets(buy_operations, sell_operations):
-    exchange: AbstractExchange = dependency_dispatcher.request_implementation(AbstractExchange)
+    exchange: AbstractExchange = dependency_dispatcher.request_implementation(
+        AbstractExchange
+    )
     quote_assets = set()
-    for buy_operation, sell_operation in iter(itertools.product(buy_operations, sell_operations)):
-        if exchange.exchange_pair_exist(buy_operation.base_currency, sell_operation.base_currency):
+    for buy_operation, sell_operation in iter(
+        itertools.product(buy_operations, sell_operations)
+    ):
+        if exchange.exchange_pair_exist(
+            buy_operation.base_currency, sell_operation.base_currency
+        ):
             quote_assets.add(sell_operation.base_currency)
-        if exchange.exchange_pair_exist(sell_operation.base_currency, buy_operation.base_currency):
+        if exchange.exchange_pair_exist(
+            sell_operation.base_currency, buy_operation.base_currency
+        ):
             quote_assets.add(buy_operation.base_currency)
     return quote_assets
 
@@ -255,47 +342,55 @@ def _split_buy_and_sell_operations(operations):
 
 
 def _get_compiled_balances(crypto_assets, fiat_asset, instant):
-    exchange: AbstractExchange = dependency_dispatcher.request_implementation(AbstractExchange)
+    exchange: AbstractExchange = dependency_dispatcher.request_implementation(
+        AbstractExchange
+    )
 
     compiled_data = {}
     current_fiat_balance = exchange.get_asset_balance(asset=fiat_asset)
     total_balance = current_fiat_balance
     for crypto_asset in crypto_assets:
         balance = exchange.get_asset_balance(asset=crypto_asset)
-        fiat_price = exchange.get_asset_price(base_asset=crypto_asset, quote_asset=fiat_asset, instant=instant)
+        fiat_price = exchange.get_asset_price(
+            base_asset=crypto_asset, quote_asset=fiat_asset, instant=instant
+        )
         fiat_balance = balance * fiat_price
         total_balance += fiat_balance
         compiled_data[crypto_asset] = {
-            'balance': balance,
-            'avg_price': fiat_price,
-            'fiat': fiat_balance,
+            "balance": balance,
+            "avg_price": fiat_price,
+            "fiat": fiat_balance,
         }
     return compiled_data, current_fiat_balance, total_balance
 
 
-def _compute_rebalancing_data(crypto_assets, exposure, compiled_data, total_balance, distribution, fiat_untouched):
+def _compute_rebalancing_data(
+    crypto_assets, exposure, compiled_data, total_balance, distribution, fiat_untouched
+):
     total_balance_without_tiny_fiat = total_balance - fiat_untouched
     rebalance_data = {}
     for crypto_asset in crypto_assets:
         percentage = distribution.assign_percentage(crypto_asset) * exposure
         wanted_fiat_balance = (percentage / 100) * total_balance_without_tiny_fiat
-        current_fiat = compiled_data[crypto_asset]['fiat']
-        avg_price = compiled_data[crypto_asset]['avg_price']
+        current_fiat = compiled_data[crypto_asset]["fiat"]
+        avg_price = compiled_data[crypto_asset]["avg_price"]
         diff = current_fiat - wanted_fiat_balance
 
-        current_percentage = round((current_fiat / total_balance_without_tiny_fiat) * 100, 2)
+        current_percentage = round(
+            (current_fiat / total_balance_without_tiny_fiat) * 100, 2
+        )
         target_percentage = round(percentage, 2)
         diff_percentage = current_percentage - target_percentage
 
         rebalance_data[crypto_asset] = {
-            'avg_price': avg_price,
-            'balance': compiled_data[crypto_asset]['balance'],
-            'wanted_fiat': wanted_fiat_balance,
-            'current_fiat': compiled_data[crypto_asset]['fiat'],
-            'diff': diff,
-            'current_percentage': current_percentage,
-            'target_percentage': target_percentage,
-            'diff_percentage': diff_percentage,
+            "avg_price": avg_price,
+            "balance": compiled_data[crypto_asset]["balance"],
+            "wanted_fiat": wanted_fiat_balance,
+            "current_fiat": compiled_data[crypto_asset]["fiat"],
+            "diff": diff,
+            "current_percentage": current_percentage,
+            "target_percentage": target_percentage,
+            "diff_percentage": diff_percentage,
         }
 
     return rebalance_data
@@ -304,11 +399,24 @@ def _compute_rebalancing_data(crypto_assets, exposure, compiled_data, total_bala
 def _transform_rebalance_data_into_operations(rebalance_data, fiat_asset):
     operations = []
     for crypto_asset, data in rebalance_data.items():
-        diff = data['diff']
-        if diff > 0:
-            o = Operation(pair=f'{crypto_asset}/{fiat_asset}', type=Operation.TYPE_SELL, quote_amount=abs(diff))
-            operations.append(o)
-        elif diff < 0:
-            o = Operation(pair=f'{crypto_asset}/{fiat_asset}', type=Operation.TYPE_BUY, quote_amount=abs(diff))
-            operations.append(o)
+        diff_percentage = abs(data["diff_percentage"])
+        current_percentage = data["current_percentage"]
+
+        if diff_percentage > 3 or current_percentage < 1:
+            diff = data["diff"]
+
+            if diff > 0:
+                o = Operation(
+                    pair=f"{crypto_asset}/{fiat_asset}",
+                    type=Operation.TYPE_SELL,
+                    quote_amount=abs(diff),
+                )
+                operations.append(o)
+            elif diff < 0 or current_percentage < 1:
+                o = Operation(
+                    pair=f"{crypto_asset}/{fiat_asset}",
+                    type=Operation.TYPE_BUY,
+                    quote_amount=abs(diff),
+                )
+                operations.append(o)
     return operations
