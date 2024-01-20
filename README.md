@@ -3,6 +3,8 @@ This is a simple project that rebalance your binance portfolio configured into `
 
 ## For users
 
+Python 3.10
+
 Install everything with:
 ```bash
 virtualenv -p python3 env
