@@ -3,14 +3,14 @@ This is a simple project that rebalance your binance portfolio configured into `
 
 ## For users
 
+Python 3.10
+
 Install everything with:
 ```bash
 virtualenv -p python3 env
 source env/bin/activate
 pip install -r requirements.txt
 ```
-
-This was tested with Python 3.7+
 
 Some common configurations that might be needed are exposed:
 
