@@ -1,4 +1,7 @@
 import itertools
+import time
+import os
+from binance.client import Client
 from core.domain.distribution import Distribution
 from core.domain.entities import Operation
 from core.domain.exceptions import CannotExecuteOperation
@@ -21,8 +24,7 @@ def rebalance(
     now=None,
     distribution: Distribution = None,
 ):
-    now = now or datetime.utcnow()
-
+    now = datetime.utcnow()
     # dependencies
     user_interface: AbstractUserInterface = (
         dependency_dispatcher.request_implementation(AbstractUserInterface)
