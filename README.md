@@ -1,3 +1,11 @@
+IN WORK !!!!!
+Fork from ForkFork :)
+
+Plan : Separate CFG for the most Exchanges
+
+
+
+
 # Binance Rebalancing
 This is a simple project that rebalance your binance portfolio configured into `settings.py` file. The current code only accepts Binance but could be easily extended to accept other exchanges as well.
 
